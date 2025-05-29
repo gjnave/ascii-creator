@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video to ASCII Art Converter</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.min.js"></script>
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container {
+            max-width: 900px;
+            padding: 2rem;
+        }
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+        }
+        #imageCanvas, #videoElement {
+            max-width: 100%;
+            width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            background-color: #f1f1f1;
+            object-fit: contain;
+        }
+        #asciiOutput {
+            font-family: monospace;
+            font-size: 8px;
+            line-height: 1;
+            white-space: pre;
+            overflow: auto;
+            background-color: #000;
+            color: #fff;
+            padding: 1rem;
+            border-radius: 5px;
+            min-height: 300px;
+            width: 100%;
+            resize: both;
+            min-width: 200px;
+            max-width: 800px;
+            min-height: 200px;
+            max-height: 600px;
+            box-sizing: border-box;
+        }
+        .btn-primary {
+            background-color: #4361ee;
+            border-color: #4361ee;
+        }
+        .btn-primary:hover {
+            background-color: #3a56d4;
+            border-color: #3a56d4;
+        }
+        .form-control:focus {
+            border-color: #4361ee;
+            box-shadow: 0 0 0 0.25rem rgba(67, 97, 238, 0.25);
+        }
+        .header {
+            margin-bottom: 2rem;
+            color: #333;
+        }
+        .header h1 {
+            font-weight: 700;
+        }
+        .header p {
+            color: #6c757d;
+        }
+        .controls {
+            margin-bottom: 1rem;
+        }
+        .slider-container {
+            margin-bottom: 1rem;
+        }
+        .action-btns {
+            display: flex;
+            gap: 10px;
+        }
+        .action-btns .btn-outline-dark {
+            background-color: #f8f9fa;
+            border-color: #6c757d;
+            color: #6c757d;
+        }
+        .action-btns .btn-outline-dark:hover {
+            background-color: #e9ecef;
+            border-color: #495057;
+            color: #495057;
+        }
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header text-center">
+            <h1>Video to ASCII Art Converter</h1>
+            <p>Upload an image or video and convert it to beautiful ASCII art</p>
+        </div>
+        
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="mediaInput" class="form-label">Select an image or video</label>
+                    <input class="form-control" type="file" id="mediaInput" accept="image/*,video/*">
+                </div>
+                
+                <div class="controls" id="controlsContainer">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="slider-container">
+                                <label for="widthSlider" class="form-label">Width: <span id="widthValue">100</span> characters</label>
+                                <input type="range" class="form-range" id="widthSlider" min="20" max="200" value="100">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="slider-container">
+                                <label for="brightnessSlider" class="form-label">Brightness: <span id="brightnessValue">1.0</span></label>
+                                <input type="range" class="form-range" id="brightnessSlider" min="0.1" max="2" step="0.1" value="1.0">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="charSetSelect" class="form-label">Character Set</label>
+                        <select class="form-select" id="charSetSelect">
+                            <option value="detailed">Detailed</option>
+                            <option value="simple">Simple</option>
+                            <option value="blocks">Blocks</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="coloredOutputToggle">
+                        <label class="form-check-label" for="coloredOutputToggle">Colored Preview</label>
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-center mt-3">
+                        <button class="btn btn-outline-secondary" id="downloadBtn" disabled>Download ASCII Art</button>
+                        <button class="btn btn-outline-secondary" id="playPauseBtn" disabled>Play/Pause</button>
+                        <button class="btn btn-outline-secondary" id="recordGifBtn" disabled>Record GIF</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Original Media</h5>
+                    </div>
+                    <div class="card-body text-center">
+                        <canvas id="imageCanvas" style="display: none;"></canvas>
+                        <video id="videoElement" controls style="display: none;"></video>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">ASCII Art</h5>
+                        <div class="action-btns" id="actionButtons">
+                            <button class="btn btn-sm btn-outline-dark" id="copyBtn" disabled title="Copy to Clipboard">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0 position-relative">
+                        <div id="asciiOutput" class="p-3"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="toast-container">
+        <div class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true" id="copySuccessToast">
+            <div class="d-flex">
+                <div class="toast-body">
+                    ASCII art copied to clipboard!
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+        <div class="toast align-items-center text-white bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true" id="copyErrorToast">
+            <div class="d-flex">
+                <div class="toast-body">
+                    Failed to copy ASCII art. Please try again.
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+        <div class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true" id="gifSuccessToast">
+            <div class="d-flex">
+                <div class="toast-body">
+                    GIF saved successfully!
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+        <div class="toast align-items-center text-white bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true" id="gifErrorToast">
+            <div class="d-flex">
+                <div class="toast-body">
+                    GIF recording unavailable. Please check your network and refresh the page.
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Declare DOM elements
+            const mediaInput = document.getElementById('mediaInput');
+            const imageCanvas = document.getElementById('imageCanvas');
+            const videoElement = document.getElementById('videoElement');
+            const asciiOutput = document.getElementById('asciiOutput');
+            const downloadBtn = document.getElementById('downloadBtn');
+            const copyBtn = document.getElementById('copyBtn');
+            const playPauseBtn = document.getElementById('playPauseBtn');
+            const recordGifBtn = document.getElementById('recordGifBtn');
+            const widthSlider = document.getElementById('widthSlider');
+            const widthValue = document.getElementById('widthValue');
+            const brightnessSlider = document.getElementById('brightnessSlider');
+            const brightnessValue = document.getElementById('brightnessValue');
+            const coloredOutputToggle = document.getElementById('coloredOutputToggle');
+            const charSetSelect = document.getElementById('charSetSelect');
+            const copySuccessToast = new bootstrap.Toast(document.getElementById('copySuccessToast'));
+            const copyErrorToast = new bootstrap.Toast(document.getElementById('copyErrorToast'));
+            const gifSuccessToast = new bootstrap.Toast(document.getElementById('gifSuccessToast'));
+            const gifErrorToast = new bootstrap.Toast(document.getElementById('gifErrorToast'));
+            
+            let ctx = imageCanvas.getContext('2d');
+            let currentImage = null;
+            let currentAsciiText = '';
+            let isVideo = false;
+            let animationFrameId = null;
+            let gifRecorder = null;
+            let isRecording = false;
+            
+            const charSets = {
+                detailed: '@%#*+=-:. ',
+                simple: '@#+-. ',
+                blocks: '█▓▒░ '
+            };
+            
+            // Utility functions
+            function debounce(func, wait) {
+                let timeout;
+                return function(...args) {
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => func.apply(this, args), wait);
+                };
+            }
+            
+            function convertToAscii(source, width, brightness, colored, charSet) {
+                if (!source || !source.width || !source.height) {
+                    console.error('Invalid source for conversion:', source);
+                    return { plainText: '', htmlOutput: colored ? '' : null };
+                }
+                
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                const canvasWidth = Math.max(1, Math.floor(width));
+                const canvasHeight = Math.max(1, Math.floor(source.height * canvasWidth / source.width / 1.8));
+                
+                if (canvasWidth <= 0 || canvasHeight <= 0 || isNaN(canvasWidth) || isNaN(canvasHeight)) {
+                    console.error('Invalid canvas dimensions:', { canvasWidth, canvasHeight, sourceWidth: source.width, sourceHeight: source.height });
+                    return { plainText: '', htmlOutput: colored ? '' : null };
+                }
+                
+                canvas.width = canvasWidth;
+                canvas.height = canvasHeight;
+                
+                ctx.drawImage(source, 0, 0, canvasWidth, canvasHeight);
+                
+                try {
+                    const imageData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+                    const data = imageData.data;
+                    
+                    let plainText = '';
+                    let htmlOutput = '';
+                    
+                    for (let y = 0; y < canvasHeight; y++) {
+                        for (let x = 0; x < canvasWidth; x++) {
+                            const idx = (y * canvasWidth + x) * 4;
+                            const r = data[idx];
+                            const g = data[idx + 1];
+                            const b = data[idx + 2];
+                            const gray = Math.round((r + g + b) / 3 * brightness);
+                            const charIndex = Math.floor(gray * (charSet.length - 1) / 255);
+                            const char = charSet[charIndex];
+                            plainText += char;
+                            if (colored) {
+                                const color = `rgb(${r},${g},${b})`;
+                                htmlOutput += `<span style="color: ${color};">${char}</span>`;
+                            }
+                        }
+                        plainText += '\n';
+                        if (colored) {
+                            htmlOutput += '<br>';
+                        }
+                    }
+                    
+                    return { plainText, htmlOutput: colored ? htmlOutput : null };
+                } catch (error) {
+                    console.error('Error in getImageData:', error);
+                    return { plainText: '', htmlOutput: colored ? '' : null };
+                }
+            }
+            
+            function renderAsciiToCanvas(asciiText, width, height, colored, charSet) {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = width * 8;
+                canvas.height = height * 12;
+                
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '12px monospace';
+                
+                const lines = asciiText.split('\n');
+                for (let y = 0; y < lines.length; y++) {
+                    const line = lines[y];
+                    for (let x = 0; x < line.length; x++) {
+                        ctx.fillStyle = 'white';
+                        ctx.fillText(line[x], x * 8, (y + 1) * 12);
+                    }
+                }
+                
+                return canvas;
+            }
+            
+            function processVideoFrame() {
+                if (videoElement.paused || videoElement.ended) return;
+                
+                const width = parseInt(widthSlider.value);
+                const brightness = parseFloat(brightnessSlider.value);
+                const isColored = coloredOutputToggle.checked;
+                const charSet = charSets[charSetSelect.value];
+                
+                const result = convertToAscii(videoElement, width, brightness, isColored, charSet);
+                currentAsciiText = result.plainText;
+                if (isColored) {
+                    asciiOutput.innerHTML = result.htmlOutput;
+                } else {
+                    asciiOutput.textContent = result.plainText;
+                }
+                
+                if (isRecording && gifRecorder) {
+                    const asciiCanvas = renderAsciiToCanvas(currentAsciiText, width, Math.round(videoElement.height * width / videoElement.width / 1.8), isColored, charSet);
+                    gifRecorder.addFrame(asciiCanvas, { delay: 1000 / 30 });
+                }
+                
+                animationFrameId = requestAnimationFrame(processVideoFrame);
+            }
+            
+            const debouncedConvert = debounce(() => {
+                if (!currentImage && !isVideo) return;
+                const width = parseInt(widthSlider.value);
+                const brightness = parseFloat(brightnessSlider.value);
+                const isColored = coloredOutputToggle.checked;
+                const charSet = charSets[charSetSelect.value];
+                
+                if (isVideo) {
+                    if (!videoElement.paused) {
+                        cancelAnimationFrame(animationFrameId);
+                        processVideoFrame();
+                    }
+                } else {
+                    const result = convertToAscii(currentImage, width, brightness, isColored, charSet);
+                    currentAsciiText = result.plainText;
+                    if (isColored) {
+                        asciiOutput.innerHTML = result.htmlOutput;
+                    } else {
+                        asciiOutput.textContent = result.plainText;
+                    }
+                }
+                
+                downloadBtn.disabled = false;
+                copyBtn.disabled = false;
+                recordGifBtn.disabled = !isVideo || !window.GIF;
+            }, 300);
+            
+            // Event listeners
+            widthSlider.addEventListener('input', function() {
+                widthValue.textContent = this.value;
+                debouncedConvert();
+            });
+            
+            brightnessSlider.addEventListener('input', function() {
+                brightnessValue.textContent = this.value;
+                debouncedConvert();
+            });
+            
+            coloredOutputToggle.addEventListener('change', function() {
+                if (isRecording) {
+                    alert('Cannot change color mode while recording GIF.');
+                    this.checked = !this.checked;
+                    return;
+                }
+                debouncedConvert();
+            });
+            
+            charSetSelect.addEventListener('change', function() {
+                if (isRecording) {
+                    alert('Cannot change character set while recording GIF.');
+                    this.value = this.dataset.lastValue || 'detailed';
+                    return;
+                }
+                this.dataset.lastValue = this.value;
+                debouncedConvert();
+            });
+            
+            mediaInput.addEventListener('change', function(e) {
+                if (e.target.files && e.target.files[0]) {
+                    const file = e.target.files[0];
+                    const reader = new FileReader();
+                    
+                    reader.onload = function(event) {
+                        if (file.type.startsWith('image/')) {
+                            isVideo = false;
+                            imageCanvas.style.display = 'block';
+                            videoElement.style.display = 'none';
+                            playPauseBtn.disabled = true;
+                            recordGifBtn.disabled = true;
+                            
+                            const img = new Image();
+                            img.onload = function() {
+                                imageCanvas.width = img.width;
+                                imageCanvas.height = img.height;
+                                ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
+                                ctx.drawImage(img, 0, 0);
+                                currentImage = img;
+                                cancelAnimationFrame(animationFrameId);
+                                debouncedConvert();
+                            };
+                            img.src = event.target.result;
+                        } else if (file.type.startsWith('video/')) {
+                            isVideo = true;
+                            imageCanvas.style.display = 'none';
+                            videoElement.style.display = 'block';
+                            playPauseBtn.disabled = false;
+                            recordGifBtn.disabled = !window.GIF;
+                            
+                            videoElement.src = event.target.result;
+                            videoElement.onloadedmetadata = function() {
+                                const cardBody = videoElement.closest('.card-body');
+                                const maxWidth = cardBody.clientWidth;
+                                const maxHeight = cardBody.clientHeight;
+                                const aspectRatio = videoElement.videoWidth / videoElement.videoHeight;
+                                
+                                if (maxWidth / aspectRatio <= maxHeight) {
+                                    videoElement.width = maxWidth;
+                                    videoElement.height = maxWidth / aspectRatio;
+                                } else {
+                                    videoElement.height = maxHeight;
+                                    videoElement.width = maxHeight * aspectRatio;
+                                }
+                                
+                                debouncedConvert();
+                            };
+                            videoElement.onplay = function() {
+                                playPauseBtn.textContent = 'Pause';
+                                processVideoFrame();
+                            };
+                            videoElement.onpause = function() {
+                                playPauseBtn.textContent = 'Play';
+                                cancelAnimationFrame(animationFrameId);
+                            };
+                        }
+                    };
+                    
+                    reader.readAsDataURL(file);
+                }
+            });
+            
+            playPauseBtn.addEventListener('click', function() {
+                if (isVideo) {
+                    if (videoElement.paused) {
+                        videoElement.play();
+                    } else {
+                        videoElement.pause();
+                    }
+                }
+            });
+            
+            copyBtn.addEventListener('click', function() {
+                if (currentAsciiText) {
+                    navigator.clipboard.writeText(currentAsciiText).then(() => {
+                        copySuccessToast.show();
+                    }).catch(() => {
+                        copyErrorToast.show();
+                    });
+                } else {
+                    copyErrorToast.show();
+                }
+            });
+            
+            downloadBtn.addEventListener('click', function() {
+                if (isVideo) {
+                    alert('For videos, ASCII art is generated in real-time. To save, copy the current frame or record as GIF.');
+                } else {
+                    const blob = new Blob([currentAsciiText], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'ascii-art.txt';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }
+            });
+            
+            recordGifBtn.addEventListener('click', function() {
+                if (!isVideo) return;
+                
+                if (!window.GIF) {
+                    gifErrorToast.show();
+                    return;
+                }
+                
+                if (!isRecording) {
+                    const width = parseInt(widthSlider.value);
+                    const height = Math.round(videoElement.height * width / videoElement.width / 1.8);
+                    
+                    try {
+                        gifRecorder = new GIF({
+                            workers: 2,
+                            quality: 10,
+                            width: width * 8,
+                            height: height * 12,
+                            workerScript: 'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js'
+                        });
+                        
+                        gifRecorder.on('finished', function(blob) {
+                            try {
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = 'ascii-art.gif';
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+                                gifSuccessToast.show();
+                            } catch (error) {
+                                console.error('Error saving GIF:', error);
+                                gifErrorToast.show();
+                            }
+                        });
+                        
+                        isRecording = true;
+                        recordGifBtn.textContent = 'Stop GIF Recording';
+                        videoElement.play();
+                    } catch (error) {
+                        console.error('Error initializing GIF recorder:', error);
+                        gifErrorToast.show();
+                    }
+                } else {
+                    if (gifRecorder) {
+                        try {
+                            gifRecorder.render();
+                            isRecording = false;
+                            recordGifBtn.textContent = 'Record GIF';
+                            gifRecorder = null;
+                        } catch (error) {
+                            console.error('Error rendering GIF:', error);
+                            gifErrorToast.show();
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
