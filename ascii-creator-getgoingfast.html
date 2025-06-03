@@ -6,6 +6,7 @@
     <title>Video to ASCII Art Converter</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.min.js"></script>
     <style>
         body {
             background-color: #f8f9fa;
@@ -103,6 +104,7 @@
     <div class="container">
         <div class="header text-center">
             <h1>Video to ASCII Art Converter</h1>
+				<div><a href="https://getgoingfast.pro">Get Going Fast</a> - <a href="https://www.youtube.com/@cognibuild">Understanding AI</a></div> ... <div><a href="https://music.youtube.com/channel/UCY658vbL6S2zlRomNHoX54Q">Listen to Good Music!</a></div>
             <p>Upload an image or video and convert it to beautiful ASCII art</p>
         </div>
         
@@ -135,13 +137,7 @@
                             <option value="detailed">Detailed</option>
                             <option value="simple">Simple</option>
                             <option value="blocks">Blocks</option>
-                            <option value="custom">Custom</option>
                         </select>
-                    </div>
-                    
-                    <div class="mb-3" id="customCharInput" style="display: none;">
-                        <label for="customChars" class="form-label">Custom Characters (e.g., cognibuild.ai )</label>
-                        <input type="text" class="form-control" id="customChars" placeholder="Enter custom characters">
                     </div>
                     
                     <div class="form-check mb-3">
@@ -152,6 +148,7 @@
                     <div class="d-grid gap-2 d-md-flex justify-content-md-center mt-3">
                         <button class="btn btn-outline-secondary" id="downloadBtn" disabled>Download ASCII Art</button>
                         <button class="btn btn-outline-secondary" id="playPauseBtn" disabled>Play/Pause</button>
+                        <button class="btn btn-outline-secondary" id="recordGifBtn" disabled>Record GIF</button>
                     </div>
                 </div>
             </div>
@@ -204,6 +201,22 @@
                 <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>
         </div>
+        <div class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true" id="gifSuccessToast">
+            <div class="d-flex">
+                <div class="toast-body">
+                    GIF saved successfully!
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+        <div class="toast align-items-center text-white bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true" id="gifErrorToast">
+            <div class="d-flex">
+                <div class="toast-body">
+                    GIF recording unavailable. Please check your network and refresh the page.
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
     </div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
@@ -217,28 +230,30 @@
             const downloadBtn = document.getElementById('downloadBtn');
             const copyBtn = document.getElementById('copyBtn');
             const playPauseBtn = document.getElementById('playPauseBtn');
+            const recordGifBtn = document.getElementById('recordGifBtn');
             const widthSlider = document.getElementById('widthSlider');
             const widthValue = document.getElementById('widthValue');
             const brightnessSlider = document.getElementById('brightnessSlider');
             const brightnessValue = document.getElementById('brightnessValue');
             const coloredOutputToggle = document.getElementById('coloredOutputToggle');
             const charSetSelect = document.getElementById('charSetSelect');
-            const customCharInput = document.getElementById('customCharInput');
-            const customChars = document.getElementById('customChars');
             const copySuccessToast = new bootstrap.Toast(document.getElementById('copySuccessToast'));
             const copyErrorToast = new bootstrap.Toast(document.getElementById('copyErrorToast'));
+            const gifSuccessToast = new bootstrap.Toast(document.getElementById('gifSuccessToast'));
+            const gifErrorToast = new bootstrap.Toast(document.getElementById('gifErrorToast'));
             
             let ctx = imageCanvas.getContext('2d');
             let currentImage = null;
             let currentAsciiText = '';
             let isVideo = false;
             let animationFrameId = null;
+            let gifRecorder = null;
+            let isRecording = false;
             
             const charSets = {
                 detailed: '@%#*+=-:. ',
                 simple: '@#+-. ',
-                blocks: '█▓▒░ ',
-                custom: 'cognibuild.ai ' // Default custom set
+                blocks: '█▓▒░ '
             };
             
             // Utility functions
@@ -248,16 +263,6 @@
                     clearTimeout(timeout);
                     timeout = setTimeout(() => func.apply(this, args), wait);
                 };
-            }
-            
-            function getCharacterSet() {
-                let charSet = charSets[charSetSelect.value];
-                if (charSetSelect.value === 'custom') {
-                    const customInput = customChars.value.trim();
-                    charSet = customInput || charSets.detailed; // Fallback to detailed if empty
-                }
-                // Ensure unique characters and sort by intensity (simplified: use as is)
-                return charSet.split('').filter((char, index, self) => self.indexOf(char) === index).join('');
             }
             
             function convertToAscii(source, width, brightness, colored, charSet) {
@@ -273,7 +278,7 @@
                 const canvasHeight = Math.max(1, Math.floor(source.height * canvasWidth / source.width / 1.8));
                 
                 if (canvasWidth <= 0 || canvasHeight <= 0 || isNaN(canvasWidth) || isNaN(canvasHeight)) {
-                    console.error('Invalid canvas dimensions:', { canvasWidth, canvasHeight, sourceWidth: source.width, sourceHeight: sourceHeight });
+                    console.error('Invalid canvas dimensions:', { canvasWidth, canvasHeight, sourceWidth: source.width, sourceHeight: source.height });
                     return { plainText: '', htmlOutput: colored ? '' : null };
                 }
                 
@@ -317,13 +322,35 @@
                 }
             }
             
+            function renderAsciiToCanvas(asciiText, width, height, colored, charSet) {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = width * 8;
+                canvas.height = height * 12;
+                
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '12px monospace';
+                
+                const lines = asciiText.split('\n');
+                for (let y = 0; y < lines.length; y++) {
+                    const line = lines[y];
+                    for (let x = 0; x < line.length; x++) {
+                        ctx.fillStyle = 'white';
+                        ctx.fillText(line[x], x * 8, (y + 1) * 12);
+                    }
+                }
+                
+                return canvas;
+            }
+            
             function processVideoFrame() {
                 if (videoElement.paused || videoElement.ended) return;
                 
                 const width = parseInt(widthSlider.value);
                 const brightness = parseFloat(brightnessSlider.value);
                 const isColored = coloredOutputToggle.checked;
-                const charSet = getCharacterSet();
+                const charSet = charSets[charSetSelect.value];
                 
                 const result = convertToAscii(videoElement, width, brightness, isColored, charSet);
                 currentAsciiText = result.plainText;
@@ -331,6 +358,11 @@
                     asciiOutput.innerHTML = result.htmlOutput;
                 } else {
                     asciiOutput.textContent = result.plainText;
+                }
+                
+                if (isRecording && gifRecorder) {
+                    const asciiCanvas = renderAsciiToCanvas(currentAsciiText, width, Math.round(videoElement.height * width / videoElement.width / 1.8), isColored, charSet);
+                    gifRecorder.addFrame(asciiCanvas, { delay: 1000 / 30 });
                 }
                 
                 animationFrameId = requestAnimationFrame(processVideoFrame);
@@ -341,7 +373,7 @@
                 const width = parseInt(widthSlider.value);
                 const brightness = parseFloat(brightnessSlider.value);
                 const isColored = coloredOutputToggle.checked;
-                const charSet = getCharacterSet();
+                const charSet = charSets[charSetSelect.value];
                 
                 if (isVideo) {
                     if (!videoElement.paused) {
@@ -360,6 +392,7 @@
                 
                 downloadBtn.disabled = false;
                 copyBtn.disabled = false;
+                recordGifBtn.disabled = !isVideo || !window.GIF;
             }, 300);
             
             // Event listeners
@@ -373,15 +406,24 @@
                 debouncedConvert();
             });
             
-            coloredOutputToggle.addEventListener('change', debouncedConvert);
-            
-            charSetSelect.addEventListener('change', function() {
-                customCharInput.style.display = this.value === 'custom' ? 'block' : 'none';
-                this.dataset.lastValue = this.value;
+            coloredOutputToggle.addEventListener('change', function() {
+                if (isRecording) {
+                    alert('Cannot change color mode while recording GIF.');
+                    this.checked = !this.checked;
+                    return;
+                }
                 debouncedConvert();
             });
             
-            customChars.addEventListener('input', debouncedConvert);
+            charSetSelect.addEventListener('change', function() {
+                if (isRecording) {
+                    alert('Cannot change character set while recording GIF.');
+                    this.value = this.dataset.lastValue || 'detailed';
+                    return;
+                }
+                this.dataset.lastValue = this.value;
+                debouncedConvert();
+            });
             
             mediaInput.addEventListener('change', function(e) {
                 if (e.target.files && e.target.files[0]) {
@@ -394,6 +436,7 @@
                             imageCanvas.style.display = 'block';
                             videoElement.style.display = 'none';
                             playPauseBtn.disabled = true;
+                            recordGifBtn.disabled = true;
                             
                             const img = new Image();
                             img.onload = function() {
@@ -411,6 +454,7 @@
                             imageCanvas.style.display = 'none';
                             videoElement.style.display = 'block';
                             playPauseBtn.disabled = false;
+                            recordGifBtn.disabled = !window.GIF;
                             
                             videoElement.src = event.target.result;
                             videoElement.onloadedmetadata = function() {
@@ -468,7 +512,7 @@
             
             downloadBtn.addEventListener('click', function() {
                 if (isVideo) {
-                    alert('For videos, ASCII art is generated in real-time. To save, copy the current frame.');
+                    alert('For videos, ASCII art is generated in real-time. To save, copy the current frame or record as GIF.');
                 } else {
                     const blob = new Blob([currentAsciiText], { type: 'text/plain' });
                     const url = URL.createObjectURL(blob);
@@ -479,6 +523,66 @@
                     a.click();
                     document.body.removeChild(a);
                     URL.revokeObjectURL(url);
+                }
+            });
+            
+            recordGifBtn.addEventListener('click', function() {
+                if (!isVideo) return;
+                
+                if (!window.GIF) {
+                    gifErrorToast.show();
+                    return;
+                }
+                
+                if (!isRecording) {
+                    const width = parseInt(widthSlider.value);
+                    const height = Math.round(videoElement.height * width / videoElement.width / 1.8);
+                    
+                    try {
+                        gifRecorder = new GIF({
+                            workers: 2,
+                            quality: 10,
+                            width: width * 8,
+                            height: height * 12,
+                            workerScript: 'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js'
+                        });
+                        
+                        gifRecorder.on('finished', function(blob) {
+                            try {
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = 'ascii-art.gif';
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+                                gifSuccessToast.show();
+                            } catch (error) {
+                                console.error('Error saving GIF:', error);
+                                gifErrorToast.show();
+                            }
+                        });
+                        
+                        isRecording = true;
+                        recordGifBtn.textContent = 'Stop GIF Recording';
+                        videoElement.play();
+                    } catch (error) {
+                        console.error('Error initializing GIF recorder:', error);
+                        gifErrorToast.show();
+                    }
+                } else {
+                    if (gifRecorder) {
+                        try {
+                            gifRecorder.render();
+                            isRecording = false;
+                            recordGifBtn.textContent = 'Record GIF';
+                            gifRecorder = null;
+                        } catch (error) {
+                            console.error('Error rendering GIF:', error);
+                            gifErrorToast.show();
+                        }
+                    }
                 }
             });
         });
