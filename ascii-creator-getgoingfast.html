@@ -104,7 +104,6 @@
     <div class="container">
         <div class="header text-center">
             <h1>Video to ASCII Art Converter</h1>
-				<div><a href="https://getgoingfast.pro">Get Going Fast</a> - <a href="https://www.youtube.com/@cognibuild">Understanding AI</a></div> ... <div><a href="https://music.youtube.com/channel/UCY658vbL6S2zlRomNHoX54Q">Listen to Good Music!</a></div>
             <p>Upload an image or video and convert it to beautiful ASCII art</p>
         </div>
         
@@ -408,6 +407,7 @@
             
             coloredOutputToggle.addEventListener('change', function() {
                 if (isRecording) {
+                    // Using a custom modal/toast would be better than alert in a real app
                     alert('Cannot change color mode while recording GIF.');
                     this.checked = !this.checked;
                     return;
@@ -417,6 +417,7 @@
             
             charSetSelect.addEventListener('change', function() {
                 if (isRecording) {
+                    // Using a custom modal/toast would be better than alert in a real app
                     alert('Cannot change character set while recording GIF.');
                     this.value = this.dataset.lastValue || 'detailed';
                     return;
@@ -500,11 +501,18 @@
             
             copyBtn.addEventListener('click', function() {
                 if (currentAsciiText) {
-                    navigator.clipboard.writeText(currentAsciiText).then(() => {
+                    // Using execCommand as a fallback for iFrame environments
+                    const textArea = document.createElement('textarea');
+                    textArea.value = currentAsciiText;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
                         copySuccessToast.show();
-                    }).catch(() => {
+                    } catch (err) {
                         copyErrorToast.show();
-                    });
+                    }
+                    document.body.removeChild(textArea);
                 } else {
                     copyErrorToast.show();
                 }
@@ -512,6 +520,7 @@
             
             downloadBtn.addEventListener('click', function() {
                 if (isVideo) {
+                    // Using a custom modal/toast would be better than alert in a real app
                     alert('For videos, ASCII art is generated in real-time. To save, copy the current frame or record as GIF.');
                 } else {
                     const blob = new Blob([currentAsciiText], { type: 'text/plain' });
@@ -526,7 +535,7 @@
                 }
             });
             
-            recordGifBtn.addEventListener('click', function() {
+            recordGifBtn.addEventListener('click', async function() {
                 if (!isVideo) return;
                 
                 if (!window.GIF) {
@@ -539,12 +548,26 @@
                     const height = Math.round(videoElement.height * width / videoElement.width / 1.8);
                     
                     try {
+                        // --- START OF FIX ---
+                        // Fetch the actual worker script content from the CDN.
+                        const response = await fetch('https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js');
+                        const workerScriptContent = await response.text();
+                        
+                        // Create a Blob from the fetched script content.
+                        const blob = new Blob([workerScriptContent], { type: 'application/javascript' });
+                        
+                        // Create a local URL for the Blob. This URL is valid in the current document's context
+                        // and can be used to initialize a Worker, bypassing cross-origin security issues.
+                        const workerUrl = URL.createObjectURL(blob);
+                        // --- END OF FIX ---
+
                         gifRecorder = new GIF({
                             workers: 2,
                             quality: 10,
                             width: width * 8,
                             height: height * 12,
-                            workerScript: 'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js'
+                            // Use the newly created blob URL for the worker.
+                            workerScript: workerUrl
                         });
                         
                         gifRecorder.on('finished', function(blob) {
@@ -562,6 +585,8 @@
                                 console.error('Error saving GIF:', error);
                                 gifErrorToast.show();
                             }
+                            // Clean up the blob URL for the worker to avoid memory leaks.
+                            URL.revokeObjectURL(workerUrl);
                         });
                         
                         isRecording = true;
